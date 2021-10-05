@@ -1,79 +1,83 @@
-import { BehaviorSubject, from, Subject } from 'rxjs'
-import { Score } from './Score'
-import { Player } from './Player'
+import { Standings } from './Standings'
 import { Set } from './Set'
+import { action, computed, makeObservable, observable, reaction } from 'mobx'
+import { MatchPart } from './MatchPart'
+import { Player } from './Player'
 
-export class Match {
-  readonly sets$: BehaviorSubject<Set[]>
-  readonly winner$: Subject<Player>
+export class Match implements MatchPart {
+  @observable
+  readonly sets: Set[]
+  readonly numberOfSets: number
+  readonly playerNames: [string, string]
 
   constructor(
-    readonly numberOfSets: number,
-    readonly players: [string, string] = ['Player 1', 'Player 2'],
-    sets?: Set[],
+    numberOfSets: number,
+    playerNames: [string, string] = ['Player 1', 'Player 2'],
+    sets = [new Set(0)],
   ) {
-    this.sets$ = new BehaviorSubject<Set[]>(sets || [new Set(0)])
-    this.winner$ = new Subject()
+    makeObservable(this)
+    this.sets = sets
+    this.numberOfSets = numberOfSets
+    this.playerNames = playerNames
+    this.trackSets()
+  }
 
-    this.sets$.subscribe((sets) =>
-      sets.forEach((set) =>
-        set.winner$.subscribe((winner) => {
-          if (set.hasWinner) {
-            console.log(`:: Player ${winner} wins set ${set.index}`)
-            if (this.hasWinner) {
-              console.log(`:::: Player ${winner} wins the match!`)
-              this.winner$.next(this.winner as Player)
-              this.sets$.complete()
-              this.winner$.complete()
-            } else {
-              this.sets$.next([...this.sets, new Set(this.sets.length)])
-            }
-          }
-        }),
-      ),
+  @computed({ requiresReaction: true })
+  get allSets(): Set[] {
+    const numberOfPlaceholders = this.numberOfSets - this.sets.length
+    const placeholders = Array.from(Array(numberOfPlaceholders)).map(
+      (_, i) => new Set(i + this.sets.length),
     )
+    return [...this.sets, ...placeholders]
   }
 
-  get sets() {
-    return this.sets$.getValue()
-  }
-
+  @computed({ requiresReaction: true })
   get currentSet() {
-    return this.sets.find((s) => s.winner === undefined)
+    return !this.hasWinner ? this.sets[this.sets.length - 1] : undefined
   }
 
-  get score(): Score {
+  @computed({ requiresReaction: true })
+  get currentGame() {
+    return this.currentSet?.currentGame
+  }
+
+  @computed({ requiresReaction: true })
+  get standings(): Standings {
     return [
       this.sets.filter((set) => set.winner === 0).length,
       this.sets.filter((set) => set.winner === 1).length,
     ]
   }
+
+  @computed({ requiresReaction: true })
   get winner() {
     const cap = Math.round(this.numberOfSets / 2)
-    const winner = this.score.findIndex((score) => score === cap)
+    const winner = this.standings.findIndex(
+      (playerStanding) => playerStanding === cap,
+    ) as Player
     return winner < 0 ? undefined : winner
   }
 
+  @computed({ requiresReaction: true })
   get hasWinner() {
     return this.winner !== undefined
   }
-}
 
-const m = new Match(3)
-setInterval(() => {
-  if (m.winner === undefined) {
-    m.currentSet?.currentGame?.addScore(Math.round(Math.random()) as 0 | 1)
+  @action
+  score(player: Player) {
+    console.log(this.currentSet, this.currentSet?.currentGame)
+    this.currentSet?.currentGame?.score(player)
   }
-}, 250)
 
-m.sets$.subscribe((sets) =>
-  sets.forEach((s) =>
-    s.games$.subscribe((games) =>
-      from(games).subscribe((g) => {
-        g.score$.subscribe((sc) =>
-          console.log(s.index, g.index, sc, s.score, m.score),
-        )
-      }),
-    ),
-  ),
-)
+  private trackSets() {
+    reaction(
+      () => this.currentSet?.winner,
+      () => {
+        if (this.currentSet?.hasWinner && !this.hasWinner) {
+          console.log('adding game!')
+          this.sets.push(new Set(this.sets.length))
+        }
+      },
+    )
+  }
+}

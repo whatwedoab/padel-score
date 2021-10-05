@@ -1,76 +1,32 @@
-import { BehaviorSubject, filter, map, Subject, take } from 'rxjs'
 import { Game } from './Game'
-import { Score } from './Score'
-import { Player } from './Player'
+import { Standings } from './Standings'
+import { computed, makeObservable, observable, reaction } from 'mobx'
+import { MatchPart } from './MatchPart'
 
-export class Set {
-  readonly games$: BehaviorSubject<Game[]>
-  readonly score$: BehaviorSubject<Score>
-  readonly winner$: Subject<Player>
+export class Set implements MatchPart {
+  @observable
+  readonly games: Game[]
+  readonly index: number
+  constructor(index: number, games: Game[] = [new Game(0)]) {
+    makeObservable(this)
+    this.games = games
+    this.index = index
 
-  constructor(readonly index: number, games: Game[] = [new Game(index, 0)]) {
-    this.score$ = new BehaviorSubject<Score>([
-      games.filter((g) => g.winner === 0).length,
-      games.filter((g) => g.winner === 1).length,
-    ])
-
-    this.games$ = new BehaviorSubject<Game[]>(games)
-
-    this.games$.subscribe((games) => {
-      games.forEach((game) => {
-        game.winner$.subscribe((w) => {
-          console.log(
-            `Player ${w} won game ${game.index}!`,
-            this.winner,
-            this.hasWinner
-              ? `And Player ${this.winner} won this set!`
-              : 'No winner in this set yet...',
-          )
-          const score = this.score$.getValue()
-          this.score$.next([
-            w === 0 ? score[0] + 1 : score[0],
-            w === 1 ? score[0] + 1 : score[0],
-          ])
-          if (!this.hasWinner) {
-            this.games$.next([
-              ...games,
-              new Game(this.index, this.games.length),
-            ])
-          }
-        })
-      })
-    })
-
-    this.winner$ = new Subject()
-    this.score$
-      .pipe(
-        map(() => this.winner),
-        filter((value) => value !== undefined),
-        map((winner) => winner as Player),
-        take(1),
-      )
-      .subscribe((winner) => {
-        this.winner$.next(winner)
-        this.score$.complete()
-        this.games$.complete()
-        this.winner$.complete()
-      })
+    this.trackGames()
   }
 
-  get games() {
-    return this.games$.getValue()
-  }
-
-  get score(): Score {
+  @computed({ requiresReaction: true })
+  get standings(): Standings {
     return [
-      this.games.filter((game) => game.winner === 0).length,
-      this.games.filter((game) => game.winner === 1).length,
+      this.games.filter((g) => g.winner === 0).length,
+      this.games.filter((g) => g.winner === 1).length,
     ]
   }
 
+  @computed({ requiresReaction: true })
   get winner() {
-    const player1Score = this.score[0]
-    const player2Score = this.score[1]
+    const player1Score = this.standings[0]
+    const player2Score = this.standings[1]
     if (player1Score >= 6 && player1Score - player2Score > 1) {
       return 0
     }
@@ -80,13 +36,24 @@ export class Set {
     return undefined
   }
 
+  @computed({ requiresReaction: true })
   get hasWinner() {
     return this.winner !== undefined
   }
 
+  @computed({ requiresReaction: true })
   get currentGame(): Game | undefined {
-    return this.winner === undefined
-      ? this.games[this.games.length - 1]
-      : undefined
+    return !this.hasWinner ? this.games[this.games.length - 1] : undefined
+  }
+
+  private trackGames() {
+    reaction(
+      () => this.currentGame?.winner,
+      () => {
+        if (this.currentGame?.hasWinner && !this.hasWinner) {
+          this.games.push(new Game(this.games.length))
+        }
+      },
+    )
   }
 }

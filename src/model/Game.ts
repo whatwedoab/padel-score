@@ -1,66 +1,55 @@
-import { Score } from './Score'
+import { Standings } from './Standings'
 import { Player } from './Player'
-import { BehaviorSubject, filter, map, Subject, take } from 'rxjs'
+import { action, computed, makeObservable, observable, toJS } from 'mobx'
+import { MatchPart } from './MatchPart'
 
-export class Game {
-  readonly score$: BehaviorSubject<Score>
-  readonly winner$: Subject<Player>
+export class Game implements MatchPart {
+  @observable
+  readonly standings: Standings
+  readonly index: number
 
-  constructor(
-    readonly setIndex: number,
-    readonly index: number,
-    score: Score = [0, 0],
-  ) {
-    this.score$ = new BehaviorSubject<Score>(score)
-    this.winner$ = new Subject()
-    this.score$
-      .pipe(
-        map(() => this.winner),
-        filter((value) => value !== undefined),
-        map((winner) => winner as Player),
-        take(1),
-      )
-      .subscribe((winner) => {
-        this.winner$.next(winner)
-        this.score$.complete()
-        this.winner$.complete()
-      })
+  constructor(index: number, standings: Standings = [0, 0]) {
+    makeObservable(this)
+    this.standings = standings
+    this.index = index
   }
 
-  get score() {
-    return this.score$.getValue()
-  }
-
+  @computed({ requiresReaction: true })
   get winner(): 0 | 1 | undefined {
-    const player1Score = this.score[0]
-    const player2Score = this.score[1]
-    if (player1Score === 40 || player1Score - player2Score === 2) {
+    const player1Standing = this.standings[0]
+    const player2Standing = this.standings[1]
+    if (player1Standing === 40 || player1Standing - player2Standing === 2) {
       return 0
     }
-    if (player2Score === 40 || player2Score - player1Score === 2) {
+    if (player2Standing === 40 || player2Standing - player1Standing === 2) {
       return 1
     }
     return undefined
   }
 
-  addScore(player: Player) {
-    const newPlayerScore = this.getNextScore(player)
-    const newScore: Score = [
-      player === 0 ? newPlayerScore : this.score[0],
-      player === 1 ? newPlayerScore : this.score[1],
-    ]
-    this.score$.next(newScore)
+  @computed({ requiresReaction: true })
+  get hasWinner() {
+    return this.winner !== undefined
   }
 
-  private getNextScore(player: Player) {
-    const player1Score = this.score[0]
-    const player2Score = this.score[1]
-    const score = this.score[player]
-    const diff = Math.abs(player1Score - player2Score)
-    if (player1Score >= 30 && player2Score >= 30 && diff < 2) {
-      return score + 1
+  @action
+  score(player: Player) {
+    const newPlayerStanding = this.getNextValue(player)
+    this.standings[player] = newPlayerStanding
+    console.log(toJS(this.standings))
+  }
+
+  private getNextValue(player: Player) {
+    const player1Standing = this.standings[0]
+    const player2Standing = this.standings[1]
+    const standing = this.standings[player]
+
+    const diff = Math.abs(player1Standing - player2Standing)
+    if (player1Standing >= 30 && player2Standing >= 30 && diff < 2) {
+      return standing + 1
     }
-    switch (score) {
+
+    switch (standing) {
       case 0:
         return 15
       case 15:
@@ -68,7 +57,7 @@ export class Game {
       case 30:
         return 40
       default:
-        return score + 1
+        return standing + 1
     }
   }
 }

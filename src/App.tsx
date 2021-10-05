@@ -1,12 +1,12 @@
 import React, { useEffect } from 'react'
 import './App.css'
-import { hydrate } from './App.store'
 import { Scoreboard } from './Scoreboard/Scoreboard'
 import { Controls } from './Controls/Controls'
+import { matchStore } from './services/Match.store'
 
 function App() {
   useEffect(() => {
-    hydrate()
+    matchStore.hydrate()
   }, [])
 
   return (
