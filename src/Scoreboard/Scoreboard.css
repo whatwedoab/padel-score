@@ -1,0 +1,20 @@
+.scoreboard {
+  display: grid;
+}
+
+.scoreboard {
+  display: grid;
+  grid-template:
+    [header-row-start] '. header-set-0 header-set-1 header-set-2 header-scores' [header-row-end]
+    [player1-row-start] 'player1 player1-set-0 player1-set-1 player1-set-2 player1-scores' [player1-row-end]
+    [player2-row-start] 'player2 player2-set-0 player2-set-1 player2-set-2 player2-scores' [player2-row-end];
+  border: 1px solid black;
+}
+
+.scoreboard__container * {
+  font-size: 2rem;
+}
+
+.scoreboard__sets-container {
+  display: flex;
+}
